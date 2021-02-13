@@ -4,7 +4,18 @@ import streamlit as st
 from googletrans import Translator
 import plotly.figure_factory as ff
 import plotly.graph_objects as go
+import numpy as np
+import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 
+
+st.set_page_config(
+    page_title='BİST İnceleme', 
+    page_icon=None, 
+    layout='wide', 
+    initial_sidebar_state='auto'
+)
 
 @st.cache
 def get_companies():
@@ -45,11 +56,25 @@ def translate_text(txt):
     x=translator.translate(txt,src='en', dest='tr')
     return x.text
 
+@st.cache()
+def get_company_logo_url(symbol):
+        try:
+            base_url='https://www.kap.org.tr'
+            page=requests.get(f'{base_url}/tr/bist-sirketler').content
+            soup = BeautifulSoup(page, 'html.parser')
+            element=soup.find(lambda tag:tag.name=="a" and symbol in tag.text)
+            page2=requests.get(base_url+element['href']).content
+            soup2 = BeautifulSoup(page2, 'html.parser')
+            logo_url = base_url+soup2.find("img", {"class": "comp-logo"})['src']
+            return logo_url 
+        except:
+            return 'https://www.designfreelogoonline.com/wp-content/uploads/2014/12/00240-Design-Free-3D-Company-Logo-Templates-03.png'
+
+
 def main():
     companies = get_companies()
-    title = st.title('BİST İnceleme')
+    title = st.title('BİST Veri İnceleme')
     st.sidebar.title("Seçenekler")
-    subheader=st.subheader('')
 
     def label(symbol):
         a = companies.loc[symbol]
@@ -58,18 +83,25 @@ def main():
     if st.sidebar.checkbox('Şirket Veri Seti'):
         st.dataframe(companies)
     st.sidebar.subheader('Şirket Seçimi')
-    asset = st.sidebar.selectbox('Aşağıdaki listeden incelemek istediğiniz şirketi seçin',
+    asset = st.sidebar.selectbox('Aşağıdaki listeden istediğiniz şirketi seçebilirsiniz.',
                                  companies.index.sort_values(), index=3,
                                  format_func=label)
-    subheader.title(companies.loc[asset]['Kısa İsim'])
+    
 
+    header_col1, header_col2,header_col3 = st.beta_columns(3) 
 
-    col1, col2 = st.beta_columns(2)
+    header_col1.image(
+            get_company_logo_url(asset),
+            width=100, # Manually Adjust the width of the image as per requirement
+        )
+
+    subheader=header_col1.markdown(companies.loc[asset]['Şirket'])                         
+    
     company_info=get_company_info(asset)
     arr_len=len(company_info.loc[asset])
 
-    col1.table(company_info.loc[asset][arr_len//2:])
-    col2.table(company_info.loc[asset][:arr_len//2])    
+    header_col2.table(company_info.loc[asset][arr_len//2:])
+    header_col3.table(company_info.loc[asset][:arr_len//2])    
 
     if st.sidebar.checkbox('Şirket Amaç ve Konusu', False):      
 
@@ -104,13 +136,24 @@ def main():
         'Mum Grafiği'
     )
     selected_graph_type = st.sidebar.selectbox(
-        'Aşağıdaki listeden görmek istediğiniz grafik çeşidini seçiniz.',
+        'Aşağıdaki listeden grafik çeşidini seçebilirsiniz.',
         graph_types
     )
 
-    
+    if selected_graph_type == 'Alan Grafiği':
+        st.subheader('Grafik Veri Seçimi')
+        option = st.selectbox(
+            'Grafikte Kullanılacak Veri',
+            data.columns[:-1],
+            index=3
+        )
 
-    if selected_graph_type in ('Çizgi Grafiği','Alan Grafiği'):
+        data2 = data[-section:][option].to_frame(option)
+
+        st.subheader(f'{asset} {option} {selected_graph_type}')
+        st.area_chart(data2)
+
+    elif selected_graph_type == 'Çizgi Grafiği':
         st.subheader('Grafik Veri Seçimi')
         option = st.selectbox(
             'Grafikte Kullanılacak Veri',
@@ -122,28 +165,175 @@ def main():
 
         st.subheader(f'{asset} {option} {selected_graph_type}')
 
-        sma = st.sidebar.checkbox('1. Yürüyen Ortalama')
+        using_pred_model = st.sidebar.checkbox('Analiz Modeli')
+        if using_pred_model:
+            pred_model_list=[
+                'Yürüyen Ortalama',
+                'Yürüyen Standart Sapma',
+                'Lineer Regresyon'
+            ]
+            pred_model = st.selectbox(
+                'Analiz Modeli Seçimi',
+                pred_model_list
+            )
+            
+            if pred_model=='Lineer Regresyon':
 
-        if sma:
-            period= st.sidebar.slider('1. Yürüyen Ortalama Periyodu', min_value=5, max_value=500,
-                                value=20,  step=1)
-            data[f'1. Yürüyen Ortalama {period}'] = data[option].rolling(period ).mean()
-            data2[f'1. Yürüyen Ortalama {period}'] = data[f'1. Yürüyen Ortalama {period}'].reindex(data2.index)
+                lin_reg_col1, lin_reg_col2 = st.beta_columns(2)
 
-        sma2 = st.sidebar.checkbox('2. Yürüyen Ortalama')
-        if sma2:
-            period2= st.sidebar.slider('2. Yürüyen Ortalama Periyodu', min_value=5, max_value=500,
-                                value=100,  step=1)
-            data[f'2. Yürüyen Ortalama {period2}'] = data[option].rolling(period2).mean()
-            data2[f'2. Yürüyen Ortalama {period2}'] = data[f'2. Yürüyen Ortalama {period2}'].reindex(data2.index)
+                lin_reg_degree= lin_reg_col1.slider('Lineer Regresyon Derecesi', min_value=0, max_value=20,
+                                value=5,  step=1)
+                pred_days=lin_reg_col2.slider('Tahmin Edilecek Gün Sayısı', min_value=1, max_value=90,
+                                value=30,  step=1)
+                xaxis = range(len(data2.index))
+                coefficients = np.polyfit(xaxis,data2[option],lin_reg_degree)
+                f = np.poly1d(coefficients)
+                #y_pred=[f(x) for x in xaxis]
+                #data2['Lineer Regresyon']=y_pred
 
-        if selected_graph_type=='Çizgi Grafiği':
-            st.line_chart(data2)
-        elif selected_graph_type=='Alan Grafiği':
-            st.area_chart(data2)
+                y_pred={'lin_reg':[f(x) for x in range(len(xaxis)+pred_days)]}
+                new_x=data2.index.to_list()+[data2.index.to_list()[-1]+timedelta(days=i) for i in range(1,pred_days+1)]
+                new_df = pd.DataFrame(y_pred, index = new_x) 
+
+                data2=pd.concat([data2, new_df], axis=1)
+
+                main_chart=st.line_chart(data2)
+
+
+            elif pred_model=='Yürüyen Ortalama':
+
+                sma_1_col1, sma_1_col2 = st.beta_columns(2)
+               
+                sma = sma_1_col1.checkbox('1. Yürüyen Ortalama',True)
+                if sma:
+                    period= sma_1_col2.slider('1. Yürüyen Ortalama Periyodu', min_value=5, max_value=500,
+                                        value=20,  step=1)
+                    data[f'1. Yürüyen Ortalama {period}'] = data[option].rolling(period ).mean()
+                    data2[f'1. Yürüyen Ortalama {period}'] = data[f'1. Yürüyen Ortalama {period}'].reindex(data2.index)
+
+                sma_2_col1, sma_2_col2 = st.beta_columns(2)
+                sma2 = sma_2_col1.checkbox('2. Yürüyen Ortalama')
+                if sma2:
+                    period2= sma_2_col2.slider('2. Yürüyen Ortalama Periyodu', min_value=5, max_value=500,
+                                        value=100,  step=1)
+                    data[f'2. Yürüyen Ortalama {period2}'] = data[option].rolling(period2).mean()
+                    data2[f'2. Yürüyen Ortalama {period2}'] = data[f'2. Yürüyen Ortalama {period2}'].reindex(data2.index)
+
+                main_chart=st.line_chart(data2)
+
+            elif pred_model=='Yürüyen Standart Sapma':
+
+                stdev_1_col1, stdev_1_col2 = st.beta_columns(2)
+               
+                stdev1 = stdev_1_col1.checkbox('1. Yürüyen Standart Sapma',True)
+
+                go_stdev_main=go.Scatter(
+                    name= asset,
+                    x=data2[option].index,
+                    y=data2[option],
+                    mode='lines',
+                    line=dict(color='rgb(31, 119, 180)')
+                )
+                
+                if stdev1:
+                    period= stdev_1_col2.slider('1. Yürüyen Standart Sapma Periyodu', min_value=7, max_value=90,
+                                        value=7,  step=1)
+
+                    data[f'1. Yürüyen Standart Sapma Üst - {period}'] = data[option] + data[option].rolling(period).std()*2 
+                    data[f'1. Yürüyen Standart Sapma Alt - {period}'] = data[option] - data[option].rolling(period).std()*2
+                    data2[f'1. Yürüyen Standart Sapma Üst - {period}'] = data[f'1. Yürüyen Standart Sapma Üst - {period}'].reindex(data2.index)
+                    data2[f'1. Yürüyen Standart Sapma Alt - {period}'] = data[f'1. Yürüyen Standart Sapma Alt - {period}'].reindex(data2.index)
+
+
+                    go_stdev_1_upper=go.Scatter(
+                        name='1. Üst Sınır',
+                        x=data2[option].index,
+                        y=data2[f'1. Yürüyen Standart Sapma Üst - {period}'],
+                        mode='lines',
+                        marker=dict(color="#633"),
+                        line=dict(width=0),
+                        showlegend=False
+                    )
+
+                    go_stdev_1_lower=go.Scatter(
+                        name='1. Alt Sınır',
+                        x=data2[option].index,
+                        y=data2[f'1. Yürüyen Standart Sapma Alt - {period}'],
+                        marker=dict(color="#633"),
+                        line=dict(width=0),
+                        mode='lines',
+                        fillcolor='rgba(90, 40, 40, 0.3)',
+                        fill='tonexty',
+                        showlegend=False
+                    )
+
+                stdev_2_col1, stdev_2_col2 = st.beta_columns(2)
+               
+                stdev2 = stdev_2_col1.checkbox('2. Yürüyen Standart Sapma',False)
+
+                if stdev2:
+                    period2= stdev_2_col2.slider('2. Yürüyen Standart Sapma Periyodu', min_value=7, max_value=90,
+                                        value=28,  step=1)
+
+                    data[f'1. Yürüyen Standart Sapma Üst - {period2}'] = data[option] + data[option].rolling(period2).std()*2 
+                    data[f'1. Yürüyen Standart Sapma Alt - {period2}'] = data[option] - data[option].rolling(period2).std()*2
+                    data2[f'1. Yürüyen Standart Sapma Üst - {period2}'] = data[f'1. Yürüyen Standart Sapma Üst - {period2}'].reindex(data2.index)
+                    data2[f'1. Yürüyen Standart Sapma Alt - {period2}'] = data[f'1. Yürüyen Standart Sapma Alt - {period2}'].reindex(data2.index)
+
+
+                    go_stdev_2_upper=go.Scatter(
+                        name='2. Üst Sınır',
+                        x=data2[option].index,
+                        y=data2[f'1. Yürüyen Standart Sapma Üst - {period2}'],
+                        mode='lines',
+                        marker=dict(color="#a88"),
+                        line=dict(width=0),
+                        showlegend=False
+                    )
+
+                    go_stdev_2_lower=go.Scatter(
+                        name='2. Alt Sınır',
+                        x=data2[option].index,
+                        y=data2[f'1. Yürüyen Standart Sapma Alt - {period2}'],
+                        marker=dict(color="#a88"),
+                        line=dict(width=0),
+                        mode='lines',
+                        fillcolor='rgba(170, 100, 100, 0.15)',
+                        fill='tonexty',
+                        showlegend=False
+                    )
+
+                stdev_data=[go_stdev_main]
+
+                try:
+                    stdev_data.append(go_stdev_1_upper)
+                    stdev_data.append(go_stdev_1_lower)
+                except:
+                    pass
+
+                try:
+                    stdev_data.append(go_stdev_2_upper)
+                    stdev_data.append(go_stdev_2_lower)
+                except:
+                    pass
+                    
+                stdev_fig = go.Figure(stdev_data)
+                stdev_fig.update_layout(
+                    hovermode="x"
+                )
+                st.plotly_chart(stdev_fig, use_container_width=True)
         else:
-            st.line_chart(data2)
-    elif selected_graph_type == ('Mum Grafiği'):
+            main_chart=st.line_chart(data2)
+
+                
+
+                
+
+
+        
+
+
+    elif selected_graph_type == 'Mum Grafiği':
 
         st.subheader(f'{asset} {selected_graph_type}')
 
@@ -160,7 +350,13 @@ def main():
                 )
             ]
         )
-        st.plotly_chart(fig, use_container_width=True)
+        fig.update_layout(
+            hovermode="x",
+            yaxis_title='Ortalama Değer (TL)',
+            title=f'{asset} Yürüyen Standart Sapma Grafiği',
+        )
+        config={'scrollZoom': True}
+        st.plotly_chart(fig, use_container_width=True,scroll_zoom= True)
 
 
         
