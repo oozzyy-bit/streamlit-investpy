@@ -321,7 +321,8 @@ def main():
                 stdev_fig.update_layout(
                     hovermode="x"
                 )
-                st.plotly_chart(stdev_fig, use_container_width=True)
+                conf={'scrollZoom': True}
+                st.plotly_chart(stdev_fig, use_container_width=True,scroll_zoom= True,config=conf)
         else:
             main_chart=st.line_chart(data2)
 
@@ -355,8 +356,8 @@ def main():
             yaxis_title='Ortalama Değer (TL)',
             title=f'{asset} Yürüyen Standart Sapma Grafiği',
         )
-        config={'scrollZoom': True}
-        st.plotly_chart(fig, use_container_width=True,scroll_zoom= True)
+        conf={'scrollZoom': True}
+        st.plotly_chart(fig, use_container_width=True,scroll_zoom= True,config=conf)
 
 
         
