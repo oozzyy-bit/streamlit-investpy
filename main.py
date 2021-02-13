@@ -1,6 +1,4 @@
 import investpy as inp
-import yfinance as yf
-
 from datetime import datetime, timedelta 
 from dateutil.relativedelta import relativedelta
 import pandas as pd
