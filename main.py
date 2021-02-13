@@ -1,9 +1,10 @@
 import investpy as inp
 from datetime import datetime, timedelta 
-from dateutil.relativedelta import relativedelta
-import pandas as pd
 import streamlit as st
 from googletrans import Translator
+import plotly.figure_factory as ff
+import plotly.graph_objects as go
+
 
 @st.cache
 def get_companies():
@@ -82,41 +83,84 @@ def main():
         
         summary_text=st.markdown(show_summary_text)
 
-
         
-        
-        
-    
-    
-
     data0 = get_comp_data(asset)
     data = data0.copy().dropna()
     data.index.name = None
+    data.columns=['Açılış', 'Yüksek', 'Düşük','Kapanış', 'Hacim','Para Birimi']
+
+    st.subheader('Grafik Veri Seçimi')
+    option = st.selectbox(
+        'Grafikte Kullanılacak Veri',
+        data.columns[:-1],
+        index=3
+    )
+
 
     section = st.sidebar.slider('Geriye Dönük Veri Sayısı', 
                                 min_value=30,
                                 max_value=min([2000, data.shape[0]]),
                                 value=500,  
                                 step=10)
-    data2 = data[-section:]['Close'].to_frame('Close')
+    data2 = data[-section:][option].to_frame(option)
 
-    sma = st.sidebar.checkbox('1. Yürüyen Ortalama')
+    st.sidebar.subheader('Grafik Seçimi')
+    graph_types=(
+        'Çizgi Grafiği',
+        'Alan Grafiği',
+        'Mum Grafiği'
+    )
+    selected_graph_type = st.sidebar.selectbox(
+        'Aşağıdaki listeden incelemek istediğiniz şirketi seçin',
+        graph_types
+    )
 
-    if sma:
-        period= st.sidebar.slider('1. Yürüyen Ortalama Periyodu', min_value=5, max_value=500,
-                             value=20,  step=1)
-        data[f'1. Yürüyen Ortalama {period}'] = data['Close'].rolling(period ).mean()
-        data2[f'1. Yürüyen Ortalama {period}'] = data[f'1. Yürüyen Ortalama {period}'].reindex(data2.index)
+    st.subheader(option+' '+selected_graph_type)
 
-    sma2 = st.sidebar.checkbox('2. Yürüyen Ortalama')
-    if sma2:
-        period2= st.sidebar.slider('2. Yürüyen Ortalama Periyodu', min_value=5, max_value=500,
-                             value=100,  step=1)
-        data[f'2. Yürüyen Ortalama {period2}'] = data['Close'].rolling(period2).mean()
-        data2[f'2. Yürüyen Ortalama {period2}'] = data[f'2. Yürüyen Ortalama {period2}'].reindex(data2.index)
+    if selected_graph_type in ('Çizgi Grafiği','Alan Grafiği'):
+        sma = st.sidebar.checkbox('1. Yürüyen Ortalama')
 
-    st.subheader('Chart')
-    st.line_chart(data2)
+        if sma:
+            period= st.sidebar.slider('1. Yürüyen Ortalama Periyodu', min_value=5, max_value=500,
+                                value=20,  step=1)
+            data[f'1. Yürüyen Ortalama {period}'] = data[option].rolling(period ).mean()
+            data2[f'1. Yürüyen Ortalama {period}'] = data[f'1. Yürüyen Ortalama {period}'].reindex(data2.index)
+
+        sma2 = st.sidebar.checkbox('2. Yürüyen Ortalama')
+        if sma2:
+            period2= st.sidebar.slider('2. Yürüyen Ortalama Periyodu', min_value=5, max_value=500,
+                                value=100,  step=1)
+            data[f'2. Yürüyen Ortalama {period2}'] = data[option].rolling(period2).mean()
+            data2[f'2. Yürüyen Ortalama {period2}'] = data[f'2. Yürüyen Ortalama {period2}'].reindex(data2.index)
+
+        if selected_graph_type=='Çizgi Grafiği':
+            st.line_chart(data2)
+        elif selected_graph_type=='Alan Grafiği':
+            st.area_chart(data2)
+        else:
+            st.line_chart(data2)
+    elif selected_graph_type == ('Mum Grafiği'):
+
+        candlestick_data=data[-section:]
+
+        fig = go.Figure(
+            data=[
+                go.Candlestick(
+                    x=candlestick_data.index,
+                    open=candlestick_data['Açılış'],
+                    high=candlestick_data['Yüksek'],
+                    low=candlestick_data['Düşük'],
+                    close=candlestick_data['Kapanış']
+                )
+            ]
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+
+        
+    elif selected_graph_type=='Mum Grafiği':
+        pass
+        
 
     if st.sidebar.checkbox('İstatistik Bilgiler'):
         st.subheader(f'{asset} İstatistik Bilgileri')
