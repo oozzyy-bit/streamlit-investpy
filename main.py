@@ -105,10 +105,13 @@ def main():
 
     if st.sidebar.checkbox('Şirket Amaç ve Konusu', False):      
 
-        en_summary_text=get_company_summary(asset)
-        tr_summary_text=translate_text(en_summary_text)
+        try:
+            en_summary_text=get_company_summary(asset)
+            tr_summary_text=translate_text(en_summary_text)
 
-        show_summary_text=en_summary_text
+            show_summary_text=en_summary_text
+        except:
+            show_summary_text='Cannot Find Summary'
 
         if st.checkbox('Bilgileri Türkçeye Çevir',False):
             show_summary_text=tr_summary_text
