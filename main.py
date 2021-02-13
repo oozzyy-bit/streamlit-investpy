@@ -89,20 +89,13 @@ def main():
     data.index.name = None
     data.columns=['Açılış', 'Yüksek', 'Düşük','Kapanış', 'Hacim','Para Birimi']
 
-    st.subheader('Grafik Veri Seçimi')
-    option = st.selectbox(
-        'Grafikte Kullanılacak Veri',
-        data.columns[:-1],
-        index=3
-    )
-
-
     section = st.sidebar.slider('Geriye Dönük Veri Sayısı', 
                                 min_value=30,
                                 max_value=min([2000, data.shape[0]]),
                                 value=500,  
                                 step=10)
-    data2 = data[-section:][option].to_frame(option)
+
+    
 
     st.sidebar.subheader('Grafik Seçimi')
     graph_types=(
@@ -111,13 +104,24 @@ def main():
         'Mum Grafiği'
     )
     selected_graph_type = st.sidebar.selectbox(
-        'Aşağıdaki listeden incelemek istediğiniz şirketi seçin',
+        'Aşağıdaki listeden görmek istediğiniz grafik çeşidini seçiniz.',
         graph_types
     )
 
-    st.subheader(option+' '+selected_graph_type)
+    
 
     if selected_graph_type in ('Çizgi Grafiği','Alan Grafiği'):
+        st.subheader('Grafik Veri Seçimi')
+        option = st.selectbox(
+            'Grafikte Kullanılacak Veri',
+            data.columns[:-1],
+            index=3
+        )
+
+        data2 = data[-section:][option].to_frame(option)
+
+        st.subheader(f'{asset} {option} {selected_graph_type}')
+
         sma = st.sidebar.checkbox('1. Yürüyen Ortalama')
 
         if sma:
@@ -140,6 +144,8 @@ def main():
         else:
             st.line_chart(data2)
     elif selected_graph_type == ('Mum Grafiği'):
+
+        st.subheader(f'{asset} {selected_graph_type}')
 
         candlestick_data=data[-section:]
 
