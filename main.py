@@ -2,7 +2,6 @@ import investpy as inp
 from datetime import datetime, timedelta
 import streamlit as st
 from googletrans import Translator
-import plotly.figure_factory as ff
 import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
@@ -86,6 +85,35 @@ def get_stock_dividents(symbol):
     df['Type']=df['Type'].apply(lambda x: ''.join([i[0].upper() for i in x.split('_')]))
     return df
 
+@st.cache()
+def get_financial_ratios(symbol):
+
+    site_url=f'https://uzmanpara.milliyet.com.tr/borsa/anahtar-oranlar/{symbol}/'
+
+    site=requests.get(site_url).content
+    soup=BeautifulSoup(site, 'html.parser')
+    target_div=soup.find('div',{'class' : 'detL'})
+    dt=[[i.parent.find('td',{'class' : x} ).text  for x in ['currency','']] for i in target_div.find_all('td',{'class' : 'currency'})]
+    dct={i:[float(j.replace('.','').replace(',','.'))] for i,j in dt}
+    dct['asset']=symbol
+    return pd.DataFrame(data=dct).set_index('asset')
+
+@st.cache()
+def get_last_10_news(symbol):
+    base_url='https://uzmanpara.milliyet.com.tr'
+    page=requests.get(base_url+f'/hisse/hisse-haberleri/{symbol}/').content
+    soup=BeautifulSoup(page, "html.parser")
+    hbr=soup.find('ul',{'class':"newsUl"}).find_all('li')
+
+    news={
+        'link':[],
+        'time':[]
+    }
+    for i in hbr[:10]:
+        news['link'].append(str(i.find('a')).replace('href="/','href="'+base_url+'/'))
+        news['time'].append(i.find('span',{'class':'date'}).text[:10])
+    return pd.DataFrame(news)
+
 
 def main():
     companies = get_companies()
@@ -103,6 +131,7 @@ def main():
                                  companies.index.sort_values(), index=3,
                                  format_func=label)
     
+    
 
     header_col1, header_col2,header_col3 = st.beta_columns((1, 2, 2))
 
@@ -118,7 +147,10 @@ def main():
 
     summary_table_type = header_col1.selectbox(
             'İncelemek İstediğiniz Bilgileri Aşağıdaki Lisdeten Seçiniz',
-            ['Market Bilgileri','Teknik Göstergeler','Finansal Özet'],
+            ['Market Bilgileri',
+            'Teknik Göstergeler',
+            'Finansal Özet',
+            'Mali Değerler'],
             index=0
         )
 
@@ -152,8 +184,6 @@ def main():
                 period_dict[header_col3.selectbox('2. Teknik Gösterge Hesaplama Periyodu',list(period_dict.keys()),
                 index=6)])
         )
-
-
 
     elif summary_table_type=='Finansal Özet':
         summary_period_dict={
@@ -189,6 +219,13 @@ def main():
                 summary_period_dict[header_col3.selectbox('2. Finansal Özet Periyodu',list(summary_period_dict.keys()),index=1)]
             ))
 
+    elif summary_table_type=='Mali Değerler':
+
+        fin_ratios=get_financial_ratios(asset)
+        fin_ratios_arr_len=len(fin_ratios.loc[asset])
+
+        header_col2.table(fin_ratios.loc[asset][fin_ratios_arr_len//2:])
+        header_col3.table(fin_ratios.loc[asset][:fin_ratios_arr_len//2])
 
 
 
@@ -208,17 +245,30 @@ def main():
             show_summary_text=tr_summary_text
         
         summary_text=st.markdown(show_summary_text)
-
+        
     
-    
+    if header_col1.checkbox('Güncel Şirket Haberlerini Göster', False):  
+        
+        pd.set_option('display.max_colwidth', None)
 
+        try:
+            new_news=get_last_10_news(asset).to_html(escape=False, index=False)
 
+            
+        except:
+            new_news='Haber Bulunamadı'
+        
+        
+        new_news_table=st.write(new_news,unsafe_allow_html=True)
+
+       
 
         
     data0 = get_comp_data(asset)
     data = data0.copy().dropna()
     data.index.name = None
     data.columns=['Açılış', 'Yüksek', 'Düşük','Kapanış', 'Hacim','Para Birimi']
+    
 
     section = st.sidebar.slider('Geriye Dönük Veri Sayısı', 
                                 min_value=30,
@@ -269,26 +319,24 @@ def main():
             pred_model_list=[
                 'Yürüyen Ortalama',
                 'Yürüyen Standart Sapma',
-                'Lineer Regresyon'
+                'Ploinom Regresyon'
             ]
             pred_model = st.selectbox(
                 'Analiz Modeli Seçimi',
                 pred_model_list
             )
             
-            if pred_model=='Lineer Regresyon':
+            if pred_model=='Ploinom Regresyon':
 
                 lin_reg_col1, lin_reg_col2 = st.beta_columns(2)
 
-                lin_reg_degree= lin_reg_col1.slider('Lineer Regresyon Derecesi', min_value=0, max_value=20,
+                lin_reg_degree= lin_reg_col1.slider('Ploinom Regresyon Derecesi', min_value=0, max_value=20,
                                 value=5,  step=1)
                 pred_days=lin_reg_col2.slider('Tahmin Edilecek Gün Sayısı', min_value=1, max_value=90,
                                 value=30,  step=1)
                 xaxis = range(len(data2.index))
                 coefficients = np.polyfit(xaxis,data2[option],lin_reg_degree)
                 f = np.poly1d(coefficients)
-                #y_pred=[f(x) for x in xaxis]
-                #data2['Lineer Regresyon']=y_pred
 
                 y_pred={'lin_reg':[f(x) for x in range(len(xaxis)+pred_days)]}
                 new_x=data2.index.to_list()+[data2.index.to_list()[-1]+timedelta(days=i) for i in range(1,pred_days+1)]
@@ -435,15 +483,8 @@ def main():
         else:
             main_chart=st.line_chart(data2)
 
-                
-
-                
-
-
-        
-
-
     elif selected_graph_type == 'Mum Grafiği':
+        data2 = data[-section:]
 
         st.subheader(f'{asset} {selected_graph_type}')
 
@@ -469,10 +510,6 @@ def main():
         st.plotly_chart(fig, use_container_width=True,scroll_zoom= True,config=conf)
 
 
-        
-    elif selected_graph_type=='Mum Grafiği':
-        pass
-        
 
     if st.sidebar.checkbox('İstatistik Bilgiler'):
         st.subheader(f'{asset} İstatistik Bilgileri')
@@ -483,5 +520,16 @@ def main():
         st.write(data2)
 
 
+
+    st.sidebar.subheader("Site Hakkında")
+    st.sidebar.info(    'Bu web uygulaması Oğuzhan Atakan tarafında hazırlanmıştır.\n'
+                        'İncelemek için: https://github.com/oozzyy-bit/streamlit-investpy')
+
+    linkedin_url='https://www.linkedin.com/in/oguzhanatakan/'
+    html = f"<a href='{linkedin_url}'><img width='30' height='30' src='https://image.flaticon.com/icons/png/512/174/174857.png'></a>"
+    
+    info_col_1,info_col_2=st.sidebar.beta_columns((1,6))
+    info_col_1.markdown(html, unsafe_allow_html=True)
+    info_col_2.markdown('oguzhan.atakan.tr@gmail.com')
 if __name__ == '__main__':
     main()
