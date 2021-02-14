@@ -1,5 +1,5 @@
 import investpy as inp
-from datetime import datetime, timedelta 
+from datetime import datetime, timedelta
 import streamlit as st
 from googletrans import Translator
 import plotly.figure_factory as ff
@@ -16,6 +16,8 @@ st.set_page_config(
     layout='wide', 
     initial_sidebar_state='auto'
 )
+
+
 
 @st.cache
 def get_companies():
@@ -56,7 +58,7 @@ def translate_text(txt):
     x=translator.translate(txt,src='en', dest='tr')
     return x.text
 
-@st.cache()
+@st.cache(show_spinner=False)
 def get_company_logo_url(symbol):
         try:
             base_url='https://www.kap.org.tr'
@@ -69,6 +71,20 @@ def get_company_logo_url(symbol):
             return logo_url 
         except:
             return 'https://www.designfreelogoonline.com/wp-content/uploads/2014/12/00240-Design-Free-3D-Company-Logo-Templates-03.png'
+
+@st.cache(show_spinner=False)
+def get_technical_indicators(symbol,interval):
+    return inp.technical_indicators(name=symbol, country='turkey', product_type='stock', interval=interval).set_index('technical_indicator').rename(columns={'value': 'Değer', 'signal': 'Gösterge'})
+
+@st.cache(show_spinner=False)
+def get_financial_summary(symbol,summary_type,period):
+    return inp.stocks.get_stock_financial_summary(symbol, 'turkey', summary_type=summary_type, period=period)
+
+@st.cache(show_spinner=False)
+def get_stock_dividents(symbol):
+    df=inp.stocks.get_stock_dividends(symbol, 'turkey').set_index('Payment Date').drop(columns='Date')
+    df['Type']=df['Type'].apply(lambda x: ''.join([i[0].upper() for i in x.split('_')]))
+    return df
 
 
 def main():
@@ -88,7 +104,7 @@ def main():
                                  format_func=label)
     
 
-    header_col1, header_col2,header_col3 = st.beta_columns(3) 
+    header_col1, header_col2,header_col3 = st.beta_columns((1, 2, 2))
 
     header_col1.image(
             get_company_logo_url(asset),
@@ -100,23 +116,103 @@ def main():
     company_info=get_company_info(asset)
     arr_len=len(company_info.loc[asset])
 
-    header_col2.table(company_info.loc[asset][arr_len//2:])
-    header_col3.table(company_info.loc[asset][:arr_len//2])    
+    summary_table_type = header_col1.selectbox(
+            'İncelemek İstediğiniz Bilgileri Aşağıdaki Lisdeten Seçiniz',
+            ['Market Bilgileri','Teknik Göstergeler','Finansal Özet'],
+            index=0
+        )
 
-    if st.sidebar.checkbox('Şirket Amaç ve Konusu', False):      
+    if summary_table_type=='Market Bilgileri':
+        header_col2.table(company_info.loc[asset][arr_len//2:])
+        header_col3.table(company_info.loc[asset][:arr_len//2])  
+
+    elif summary_table_type=='Teknik Göstergeler':
+        period_dict={
+                '5 Dakika':'5mins', 
+                '15 Dakika':'15mins', 
+                '30 Dakika':'30mins', 
+                '1 Saat':'1hour', 
+                '5 Saat':'5hours', 
+                'Günlük':'daily', 
+                'Haftalık':'weekly' , 
+                'Aylık':'monthly'
+            }
+
+        
+        technical_indicator_table_1=header_col2.table(
+            get_technical_indicators(
+                asset,
+                period_dict[header_col2.selectbox('1. Teknik Gösterge Hesaplama Periyodu',list(period_dict.keys()),
+                index=3)])
+        )
+
+        technical_indicator_table_1=header_col3.table(
+            get_technical_indicators(
+                asset,
+                period_dict[header_col3.selectbox('2. Teknik Gösterge Hesaplama Periyodu',list(period_dict.keys()),
+                index=6)])
+        )
+
+
+
+    elif summary_table_type=='Finansal Özet':
+        summary_period_dict={
+            'Senelik':'annual' ,
+            'Dönemlik' :'quarterly'
+        }
+        summary_type_dict={
+            'Gelir Tablosu':'income_statement',
+            'Nakit Akış Tablosu':'cash_flow_statement',
+            'Bilanço':'balance_sheet',
+            'Kar Dağıtımı':'divident'
+        }
+
+        summary_type_1=summary_type_dict[header_col2.selectbox('1. Finansal Özet Çeşidi',list(summary_type_dict.keys()),index=0)]
+
+        if summary_type_1=='divident':
+            header_col2.table(get_stock_dividents(asset))
+        else:
+            header_col2.table(get_financial_summary(
+                asset,
+                summary_type_1,
+                summary_period_dict[header_col2.selectbox('1. Finansal Özet Periyodu',list(summary_period_dict.keys()),index=0)]
+            ))
+
+        summary_type_2=summary_type_dict[header_col3.selectbox('2. Finansal Özet Çeşidi',list(summary_type_dict.keys()),index=1)]
+
+        if summary_type_2=='divident':
+            header_col3.table(get_stock_dividents(asset))
+        else:
+            header_col3.table(get_financial_summary(
+                asset,
+                summary_type_2,
+                summary_period_dict[header_col3.selectbox('2. Finansal Özet Periyodu',list(summary_period_dict.keys()),index=1)]
+            ))
+
+
+
+
+    
+
+    if header_col1.checkbox('Şirket Amaç ve Konusu', False):      
 
         try:
             en_summary_text=get_company_summary(asset)
-            tr_summary_text=translate_text(en_summary_text)
 
             show_summary_text=en_summary_text
         except:
             show_summary_text='Cannot Find Summary'
 
         if st.checkbox('Bilgileri Türkçeye Çevir',False):
+            tr_summary_text=translate_text(en_summary_text)
             show_summary_text=tr_summary_text
         
         summary_text=st.markdown(show_summary_text)
+
+    
+    
+
+
 
         
     data0 = get_comp_data(asset)
@@ -239,8 +335,13 @@ def main():
                 )
                 
                 if stdev1:
-                    period= stdev_1_col2.slider('1. Yürüyen Standart Sapma Periyodu', min_value=7, max_value=90,
-                                        value=7,  step=1)
+                    period= stdev_1_col2.slider(
+                        '1. Yürüyen Standart Sapma Periyodu', 
+                        min_value=5, 
+                        max_value=45,
+                        value=7,  
+                        step=1
+                    )
 
                     data[f'1. Yürüyen Standart Sapma Üst - {period}'] = data[option] + data[option].rolling(period).std()*2 
                     data[f'1. Yürüyen Standart Sapma Alt - {period}'] = data[option] - data[option].rolling(period).std()*2
@@ -275,8 +376,13 @@ def main():
                 stdev2 = stdev_2_col1.checkbox('2. Yürüyen Standart Sapma',False)
 
                 if stdev2:
-                    period2= stdev_2_col2.slider('2. Yürüyen Standart Sapma Periyodu', min_value=7, max_value=90,
-                                        value=28,  step=1)
+                    period2= stdev_2_col2.slider(
+                        '2. Yürüyen Standart Sapma Periyodu', 
+                        min_value=5, 
+                        max_value=45,
+                        value=28,  
+                        step=1
+                    )
 
                     data[f'1. Yürüyen Standart Sapma Üst - {period2}'] = data[option] + data[option].rolling(period2).std()*2 
                     data[f'1. Yürüyen Standart Sapma Alt - {period2}'] = data[option] - data[option].rolling(period2).std()*2
