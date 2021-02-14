@@ -8,7 +8,7 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
   
-  
+
 
 st.set_page_config(
     page_title='BİST İnceleme', 
@@ -128,8 +128,14 @@ def main():
     if st.sidebar.checkbox('Şirket Veri Seti'):
         st.dataframe(companies)
     st.sidebar.subheader('Şirket Seçimi')
+
+    
+    try:
+        starting_company_index=list(companies.index.sort_values()).index('GARAN')
+    except:
+        starting_company_index=3
     asset = st.sidebar.selectbox('Aşağıdaki listeden istediğiniz şirketi seçebilirsiniz.',
-                                 companies.index.sort_values(), index=3,
+                                 companies.index.sort_values(), index=starting_company_index,
                                  format_func=label)
     
     
@@ -152,7 +158,7 @@ def main():
             'Teknik Göstergeler',
             'Finansal Özet',
             'Mali Değerler'],
-            index=0
+            index=1
         )
 
     if summary_table_type=='Market Bilgileri':
@@ -183,7 +189,7 @@ def main():
             get_technical_indicators(
                 asset,
                 period_dict[header_col3.selectbox('2. Teknik Gösterge Hesaplama Periyodu',list(period_dict.keys()),
-                index=6)])
+                index=7)])
         )
 
     elif summary_table_type=='Finansal Özet':
