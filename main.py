@@ -326,18 +326,18 @@ def main():
             pred_model_list=[
                 'Yürüyen Ortalama',
                 'Yürüyen Standart Sapma',
-                'Ploinom Regresyon'
+                'Polinom Regresyon'
             ]
             pred_model = st.selectbox(
                 'Analiz Modeli Seçimi',
                 pred_model_list
             )
             
-            if pred_model=='Ploinom Regresyon':
+            if pred_model=='Polinom Regresyon':
 
                 lin_reg_col1, lin_reg_col2 = st.beta_columns(2)
 
-                lin_reg_degree= lin_reg_col1.slider('Ploinom Regresyon Derecesi', min_value=0, max_value=20,
+                lin_reg_degree= lin_reg_col1.slider('Polinom Regresyon Derecesi', min_value=0, max_value=20,
                                 value=5,  step=1)
                 pred_days=lin_reg_col2.slider('Tahmin Edilecek Gün Sayısı', min_value=1, max_value=90,
                                 value=30,  step=1)
