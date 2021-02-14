@@ -7,7 +7,8 @@ import numpy as np
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
-
+  
+  
 
 st.set_page_config(
     page_title='BİST İnceleme', 
